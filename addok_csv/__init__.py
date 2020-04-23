@@ -54,11 +54,19 @@ class BaseCSV(View):
         return content
 
     def compute_dialect(self, req, file_, content, encoding):
-        try:
-            extract = file_.file.read(4096).decode(encoding)
-        except (LookupError, UnicodeDecodeError) as e:
-            msg = 'Unable to decode with encoding "{}"'.format(encoding)
-            raise falcon.HTTPBadRequest(msg, str(e))
+        # Variable-length encodings can have split chars when reading buffer
+        # utf8 can be up to 4 bytes so we try up to 4099th byte when UnicodeDecodeError is raised
+        length = 4096
+        upto = 4099
+        while True:
+            try:
+                extract = file_.file.read(length).decode(encoding)
+                break
+            except (LookupError, UnicodeDecodeError) as e: 
+                length += 1 
+                if length > upto:
+                    msg = 'Unable to decode with encoding "{}"'.format(encoding)
+                    raise falcon.HTTPBadRequest(msg, str(e))
         try:
             dialect = csv.Sniffer().sniff(extract)
         except csv.Error:
